@@ -19,11 +19,88 @@ COLUMNS = FEATURES + [TARGET]
 
 st.markdown("""
 <style>
-.block-container {padding-top: 1.8rem; padding-bottom: 2rem;}
-[data-testid="stMetric"] {background: #f4f7fb; padding: 16px; border-radius: 12px; border: 1px solid #e4eaf3;}
-div[data-testid="stTabs"] button {font-weight: 600;}
+/* Blue + purple professional dashboard theme */
+:root {
+    --brand-blue: #2563eb;
+    --brand-purple: #7c3aed;
+    --ink: #172554;
+    --muted: #64748b;
+    --panel: #ffffff;
+    --line: #dbeafe;
+}
+.stApp {
+    background: linear-gradient(135deg, #f8fbff 0%, #f3f0ff 52%, #eef6ff 100%);
+    color: var(--ink);
+}
+.block-container {padding-top: 1.6rem; padding-bottom: 2.2rem; max-width: 1450px;}
+[data-testid="stHeader"] {background: rgba(255,255,255,0.75);}
+h1 {color: #172554 !important; letter-spacing: -0.035em; font-weight: 800 !important;}
+h2, h3, h4 {color: #1e3a8a !important; font-weight: 750 !important;}
+p, label, .stCaption {color: #475569;}
+[data-testid="stMetric"] {
+    background: linear-gradient(145deg, #ffffff 0%, #eff6ff 100%);
+    padding: 18px 18px 16px;
+    border-radius: 16px;
+    border: 1px solid #dbeafe;
+    box-shadow: 0 7px 20px rgba(37, 99, 235, 0.08);
+}
+[data-testid="stMetricLabel"] {color: #475569 !important; font-weight: 650;}
+[data-testid="stMetricValue"] {color: #4338ca !important; font-weight: 800;}
+[data-testid="stMetricDelta"] {font-weight: 650;}
+div[data-testid="stTabs"] button {
+    font-weight: 700;
+    border-radius: 10px 10px 0 0;
+    padding: 0.65rem 0.85rem;
+}
+div[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #4338ca !important;
+    border-bottom: 3px solid #7c3aed !important;
+    background: #ede9fe;
+}
+.stButton > button, .stDownloadButton > button {
+    border-radius: 11px;
+    border: 0;
+    color: white;
+    background: linear-gradient(100deg, #2563eb, #7c3aed);
+    font-weight: 700;
+    box-shadow: 0 5px 14px rgba(79, 70, 229, 0.18);
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+    color: white;
+    border: 0;
+    background: linear-gradient(100deg, #1d4ed8, #6d28d9);
+}
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #eff6ff 0%, #f5f3ff 100%);
+    border-right: 1px solid #dbeafe;
+}
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    overflow: hidden;
+}
+[data-testid="stAlert"] {border-radius: 13px;}
+hr {border-color: #dbeafe;}
+@media (max-width: 768px) {
+    .block-container {padding-left: 1rem; padding-right: 1rem;}
+    h1 {font-size: 1.9rem !important;}
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Coordinated chart colors for a consistent visual identity.
+plt.rcParams.update({
+    "figure.facecolor": "white",
+    "axes.facecolor": "#fbfdff",
+    "axes.edgecolor": "#cbd5e1",
+    "axes.labelcolor": "#334155",
+    "xtick.color": "#475569",
+    "ytick.color": "#475569",
+    "text.color": "#172554",
+    "axes.titleweight": "bold",
+    "axes.titlecolor": "#1e3a8a",
+    "grid.color": "#dbeafe",
+})
 
 @st.cache_data
 def load_default_data():
@@ -113,7 +190,7 @@ with tab1:
     with left:
         st.markdown("#### Final grade distribution")
         fig, ax = plt.subplots()
-        ax.hist(df[TARGET], bins=11, edgecolor="black")
+        ax.hist(df[TARGET], bins=11, color="#6366f1", edgecolor="white", linewidth=1.2)
         ax.set_xlabel("Final grade (0–20)")
         ax.set_ylabel("Number of students")
         ax.grid(axis="y", alpha=.25)
@@ -123,7 +200,7 @@ with tab1:
         st.markdown("#### Average final grade by study-time level")
         grouped = df.groupby("study_time_level")[TARGET].mean()
         fig, ax = plt.subplots()
-        ax.bar(grouped.index.astype(str), grouped.values)
+        ax.bar(grouped.index.astype(str), grouped.values, color=["#2563eb", "#4f46e5", "#7c3aed", "#a78bfa"][:len(grouped)])
         ax.set_xlabel("Study-time level (1–4)")
         ax.set_ylabel("Average final grade")
         ax.grid(axis="y", alpha=.25)
@@ -171,7 +248,7 @@ with tab4:
     with c1:
         st.markdown("#### Period 2 vs final grade")
         fig, ax = plt.subplots()
-        ax.scatter(df.period2_grade, df.final_grade, alpha=.7)
+        ax.scatter(df.period2_grade, df.final_grade, alpha=.78, color="#4f46e5", edgecolors="white", linewidths=.5)
         ax.set_xlabel("Period 2 grade")
         ax.set_ylabel("Final grade")
         ax.grid(alpha=.25)
@@ -180,7 +257,7 @@ with tab4:
     with c2:
         st.markdown("#### Absences vs final grade")
         fig, ax = plt.subplots()
-        ax.scatter(df.absences, df.final_grade, alpha=.7)
+        ax.scatter(df.absences, df.final_grade, alpha=.78, color="#0ea5e9", edgecolors="white", linewidths=.5)
         ax.set_xlabel("Absences")
         ax.set_ylabel("Final grade")
         ax.grid(alpha=.25)
@@ -189,7 +266,7 @@ with tab4:
     st.markdown("#### Feature correlation")
     corr = df[COLUMNS].corr()
     fig, ax = plt.subplots()
-    image = ax.imshow(corr, vmin=-1, vmax=1, aspect="auto")
+    image = ax.imshow(corr, vmin=-1, vmax=1, aspect="auto", cmap="Purples")
     ax.set_xticks(range(len(corr.columns)))
     ax.set_xticklabels(corr.columns, rotation=35, ha="right")
     ax.set_yticks(range(len(corr.columns)))
@@ -208,7 +285,7 @@ with tab5:
     a.metric("Lowest MAE on this test split", f"{best.MAE:.2f}", help="Lower is better; this single split does not prove general superiority.")
     b.metric("Best model on this split", best.Model)
     fig, ax = plt.subplots()
-    ax.bar(metrics.Model, metrics.MAE)
+    ax.bar(metrics.Model, metrics.MAE, color=["#2563eb", "#6366f1", "#7c3aed"])
     ax.set_ylabel("MAE (lower is better)")
     ax.tick_params(axis="x", rotation=15)
     ax.grid(axis="y", alpha=.25)
@@ -217,7 +294,7 @@ with tab5:
     selected = models[model_name]
     pred = selected.predict(X_test)
     fig, ax = plt.subplots()
-    ax.scatter(y_test, pred, alpha=.75)
+    ax.scatter(y_test, pred, alpha=.8, color="#4f46e5", edgecolors="white", linewidths=.5)
     ax.plot([0, 20], [0, 20], linestyle="--")
     ax.set_xlim(0, 20)
     ax.set_ylim(0, 20)
@@ -231,7 +308,7 @@ with tab5:
     importance = pd.DataFrame({"Feature": FEATURES, "Importance": importance_model.feature_importances_}).sort_values("Importance", ascending=False)
     st.markdown("#### Random Forest feature importance")
     fig, ax = plt.subplots()
-    ax.barh(importance.Feature[::-1], importance.Importance[::-1])
+    ax.barh(importance.Feature[::-1], importance.Importance[::-1], color="#7c3aed")
     ax.set_xlabel("Relative importance")
     st.pyplot(fig)
     plt.close(fig)
