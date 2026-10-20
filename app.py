@@ -1,4 +1,5 @@
 import hashlib
+from io import BytesIO
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -126,6 +127,85 @@ def train_models(dataset_csv, version):
                      "RMSE":round(mean_squared_error(y_test,pred)**0.5,3),"R²":round(r2_score(y_test,pred),3)})
     return models, pd.DataFrame(rows), X_test, y_test
 
+
+def build_pdf_report(dataset, model_metrics, chosen_model, model_objects):
+    """Create a downloadable PDF summary using ReportLab."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, rightMargin=0.65*inch, leftMargin=0.65*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="ProjectTitle", parent=styles["Title"], textColor=colors.HexColor("#4338ca"),
+        fontSize=22, leading=27, spaceAfter=12
+    ))
+    story = [
+        Paragraph("Student Performance AI", styles["ProjectTitle"]),
+        Paragraph("Project Analytics & Model Evaluation Report", styles["Heading2"]),
+        Spacer(1, 8),
+        Paragraph(
+            "Dataset scope: UCI Student Performance data for Portuguese secondary-school students "
+            "(Mathematics subset). This is not college/BCA student data. Predictions are educational "
+            "estimates and must not be used to label students or make high-stakes decisions.",
+            styles["BodyText"]
+        ),
+        Spacer(1, 12),
+        Paragraph("Dataset Summary", styles["Heading2"]),
+    ]
+    summary = [
+        ["Measure", "Value"],
+        ["Valid records", f"{len(dataset):,}"],
+        ["Average final grade", f"{dataset[TARGET].mean():.2f} / 20"],
+        ["Average period 2 grade", f"{dataset['period2_grade'].mean():.2f} / 20"],
+        ["Average absences", f"{dataset['absences'].mean():.2f}"],
+        ["Selected prediction model", chosen_model],
+    ]
+    table = Table(summary, colWidths=[2.6*inch, 3.8*inch])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#4338ca")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
+        ("BACKGROUND", (0,1), (-1,-1), colors.HexColor("#f8fafc")),
+        ("PADDING", (0,0), (-1,-1), 7),
+    ]))
+    story.extend([table, Spacer(1, 14), Paragraph("Regression Model Comparison", styles["Heading2"])])
+    metrics_data = [["Model", "MAE", "RMSE", "R²"]]
+    for _, row in model_metrics.iterrows():
+        metrics_data.append([str(row["Model"]), f"{row['MAE']:.3f}", f"{row['RMSE']:.3f}", f"{row['R²']:.3f}"])
+    mt = Table(metrics_data, colWidths=[2.5*inch, 1.1*inch, 1.1*inch, 1.1*inch])
+    mt.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#4f46e5")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
+        ("PADDING", (0,0), (-1,-1), 7),
+    ]))
+    story.extend([
+        mt, Spacer(1, 14), Paragraph("Methodology & Limitations", styles["Heading2"]),
+        Paragraph(
+            "Rows with missing, infinite, invalid, or duplicate values are removed during cleaning. "
+            "Three regression models are compared on a fixed hold-out split. MAE and RMSE measure "
+            "prediction error (lower is better); R² summarizes test-set fit. Scores can vary with the "
+            "dataset and split and do not prove general superiority. Period 2 grade is close to final "
+            "grade, so including it may make the task easier than a true early-warning prediction.",
+            styles["BodyText"]
+        ),
+        Spacer(1, 8),
+        Paragraph("Technologies: Python, Streamlit, Pandas, Matplotlib and scikit-learn.", styles["BodyText"]),
+        Paragraph("Team: Anuj Shukla, Janhavi Yadav, Kajal Upadhyay and Aditi Singh.", styles["BodyText"]),
+    ])
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 st.markdown("""
 <div class="hero"><div class="hero-inner"><div style="flex:1;min-width:240px">
 <span class="hero-eyebrow">Student Performance • Data Science Project</span>
@@ -171,10 +251,10 @@ for col, (icon, title, desc) in zip(feature_cols, [
         st.markdown(f'<div class="glass-card"><div class="feature-icon">{icon}</div><h4>{title}</h4><p>{desc}</p></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🏠 Overview", "🔎 Explore Data", "🔮 Predict Grade", "📈 Analytics",
     "🤖 Model Evaluation", "🧠 Explain AI", "🎯 Support Insights",
-    "📥 Reports", "👥 Meet the Team"
+    "📥 Reports", "👥 Meet the Team", "ℹ️ About Project"
 ])
 
 with tab1:
@@ -229,6 +309,18 @@ with tab3:
         estimate = min(20,max(0,float(models[model_name].predict(sample)[0])))
         st.metric("Estimated final grade",f"{estimate:.1f} / 20")
         st.caption(f"Model: {model_name}. Estimates are uncertain and should not be used to label or make decisions about individual students.")
+        st.markdown("#### What information did the model use?")
+        st.dataframe(sample.rename(columns={
+            "study_time_level": "Study-time level",
+            "absences": "Absences",
+            "period1_grade": "Period 1 grade",
+            "period2_grade": "Period 2 grade",
+        }), use_container_width=True, hide_index=True)
+        st.caption(
+            "The estimate is based on all four input features. See the Explain AI tab for "
+            "permutation importance, which summarizes how much each feature affects model performance "
+            "overall; it is not a causal explanation for this individual prediction."
+        )
 
 with tab4:
     st.markdown('<div class="section-kicker">Insights / Analytics</div>',unsafe_allow_html=True)
@@ -366,6 +458,17 @@ with tab8:
     st.markdown('<div class="section-kicker">Export center</div>', unsafe_allow_html=True)
     st.subheader("Download project outputs")
     st.write("Download clean data, model comparison metrics, or a combined CSV report for documentation.")
+    try:
+        pdf_bytes = build_pdf_report(df, metrics, model_name, models)
+        st.download_button(
+            "📄 Download professional PDF report", pdf_bytes,
+            "student_performance_ai_report.pdf", "application/pdf",
+            use_container_width=True
+        )
+    except ImportError:
+        st.warning("PDF export needs ReportLab. Add `reportlab` to requirements.txt, then redeploy.")
+    except Exception as exc:
+        st.warning(f"PDF report could not be generated: {exc}")
     st.download_button(
         "⬇️ Clean dataset CSV", csv_text, "student_math_clean.csv", "text/csv",
         use_container_width=True
@@ -426,6 +529,54 @@ with tab9:
         "Team roles are suggested project-role descriptions. Edit them if actual contributions differ. "
         "Photo files are optional; if a file is missing, the member card still displays."
     )
+
+
+with tab10:
+    st.markdown('<div class="section-kicker">Project presentation</div>', unsafe_allow_html=True)
+    st.title("About Student Performance AI")
+    st.write(
+        "An educational data-science application for exploring student grade patterns, comparing "
+        "regression models and estimating a final grade from selected academic indicators."
+    )
+    st.markdown("### Problem statement")
+    st.write(
+        "Academic datasets contain patterns that can be explored with statistics and machine learning. "
+        "This project demonstrates a complete workflow from data cleaning and visualization to model "
+        "evaluation and responsible interpretation."
+    )
+    st.markdown("### Technology stack")
+    tech_cols = st.columns(5)
+    for col, title, desc in zip(
+        tech_cols,
+        ["Python", "Streamlit", "Pandas", "Matplotlib", "scikit-learn"],
+        ["Core language", "Web dashboard", "Data preparation", "Charts", "ML models"]
+    ):
+        with col:
+            st.markdown(
+                f'<div class="glass-card"><div class="team-name">{title}</div>'
+                f'<div class="team-desc">{desc}</div></div>',
+                unsafe_allow_html=True
+            )
+    st.markdown("### Workflow")
+    st.markdown(
+        "1. Load the CSV dataset.\n"
+        "2. Validate required columns and clean invalid records.\n"
+        "3. Explore distributions, relationships and correlations.\n"
+        "4. Train Linear Regression, Decision Tree and Random Forest models.\n"
+        "5. Compare predictions with hold-out test data using MAE, RMSE and R².\n"
+        "6. Export results and communicate limitations."
+    )
+    st.markdown("### Responsible use")
+    st.warning(
+        "The source data represents Portuguese secondary-school students in Mathematics, not BCA "
+        "college students. The model is a learning demonstration. Grade estimates are uncertain, "
+        "correlation is not causation, and results should not be used for high-stakes decisions."
+    )
+    st.markdown("### Team")
+    st.write("Anuj Shukla · Janhavi Yadav · Kajal Upadhyay · Aditi Singh")
+    st.markdown("### Source")
+    st.write("UCI Machine Learning Repository — Student Performance dataset.")
+    st.caption("If you add a public repository URL, place it here in the app's source code.")
 
 st.markdown("""
 <div class="footer"><div style="font-weight:800;color:#4338ca;font-size:.92rem">🎓 Student Performance AI</div>
