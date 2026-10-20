@@ -171,8 +171,10 @@ for col, (icon, title, desc) in zip(feature_cols, [
         st.markdown(f'<div class="glass-card"><div class="feature-icon">{icon}</div><h4>{title}</h4><p>{desc}</p></div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏠 Overview","🔎 Explore Data","🔮 Predict Grade","📈 Analytics","🤖 Model Evaluation","👥 Meet the Team"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    "🏠 Overview", "🔎 Explore Data", "🔮 Predict Grade", "📈 Analytics",
+    "🤖 Model Evaluation", "🧠 Explain AI", "🎯 Support Insights",
+    "📥 Reports", "👥 Meet the Team"
 ])
 
 with tab1:
@@ -282,6 +284,113 @@ with tab5:
     st.download_button("⬇️ Download model report",metrics.to_csv(index=False),"model_comparison_report.csv","text/csv")
 
 with tab6:
+    st.markdown('<div class="section-kicker">Model interpretation</div>', unsafe_allow_html=True)
+    st.subheader("What influences the model estimate?")
+    st.write(
+        "This section shows which input features the Random Forest uses most in its predictions. "
+        "Feature importance is a model-level summary; it does not prove that a feature causes a grade to change."
+    )
+    try:
+        from sklearn.inspection import permutation_importance
+        selected_model = models[model_name]
+        perm = permutation_importance(
+            selected_model, X_test, y_test, n_repeats=8, random_state=42,
+            scoring="neg_mean_absolute_error"
+        )
+        explanation = pd.DataFrame({
+            "Feature": FEATURES,
+            "Importance": perm.importances_mean,
+            "Variation": perm.importances_std
+        }).sort_values("Importance", ascending=True)
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        ax.barh(explanation["Feature"], explanation["Importance"], xerr=explanation["Variation"])
+        ax.set_xlabel("Permutation importance (change in model score)")
+        ax.set_title(f"Feature contribution to {model_name}")
+        ax.grid(axis="x", alpha=.25)
+        fig.tight_layout()
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+        st.dataframe(explanation.sort_values("Importance", ascending=False).round(4),
+                     use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.info(f"Could not calculate permutation importance for this split: {exc}")
+    st.warning(
+        "The period 2 grade can be very close to the final grade. This may make prediction look easier "
+        "than a true early-warning task. For a fair early prediction, evaluate a model without period 2 grade."
+    )
+
+with tab7:
+    st.markdown('<div class="section-kicker">Academic support indicators</div>', unsafe_allow_html=True)
+    st.subheader("Review students who may benefit from support")
+    st.caption(
+        "These are simple screening indicators for demonstration, not diagnoses or decisions about students. "
+        "Use them only to guide supportive review."
+    )
+    support_df = df.copy()
+    support_df["Estimated support band"] = pd.cut(
+        support_df[TARGET], bins=[-0.01, 9.99, 13.99, 20.01],
+        labels=["Further review may help", "Monitor progress", "Satisfactory in this dataset"]
+    )
+    band_counts = support_df["Estimated support band"].value_counts().reindex(
+        ["Further review may help", "Monitor progress", "Satisfactory in this dataset"], fill_value=0
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("#### Records by review band")
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.bar(band_counts.index.astype(str), band_counts.values)
+        ax.set_ylabel("Number of records")
+        ax.tick_params(axis="x", rotation=15)
+        ax.grid(axis="y", alpha=.25)
+        fig.tight_layout()
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+    with c2:
+        st.markdown("#### Summary")
+        st.metric("Further review may help", int(band_counts.get("Further review may help", 0)))
+        st.metric("Monitor progress", int(band_counts.get("Monitor progress", 0)))
+        st.metric("Satisfactory in this dataset", int(band_counts.get("Satisfactory in this dataset", 0)))
+    st.dataframe(
+        support_df[FEATURES + [TARGET, "Estimated support band"]],
+        use_container_width=True, hide_index=True
+    )
+    st.download_button(
+        "⬇️ Download support review CSV",
+        support_df.to_csv(index=False),
+        "student_support_review.csv",
+        "text/csv"
+    )
+    st.info("Bands use the observed final grade in the dataset. They are not predictions for new students.")
+
+with tab8:
+    st.markdown('<div class="section-kicker">Export center</div>', unsafe_allow_html=True)
+    st.subheader("Download project outputs")
+    st.write("Download clean data, model comparison metrics, or a combined CSV report for documentation.")
+    st.download_button(
+        "⬇️ Clean dataset CSV", csv_text, "student_math_clean.csv", "text/csv",
+        use_container_width=True
+    )
+    st.download_button(
+        "⬇️ Model comparison CSV", metrics.to_csv(index=False),
+        "model_comparison_report.csv", "text/csv", use_container_width=True
+    )
+    combined = metrics.copy()
+    combined["Dataset rows"] = len(df)
+    combined["Mean final grade"] = round(float(df[TARGET].mean()), 3)
+    combined["Mean absences"] = round(float(df["absences"].mean()), 3)
+    st.download_button(
+        "⬇️ Summary report CSV", combined.to_csv(index=False),
+        "student_performance_summary.csv", "text/csv", use_container_width=True
+    )
+    st.markdown("#### Methodology")
+    st.markdown(
+        "- Dataset is cleaned and checked for required columns.\n"
+        "- Three regression models are evaluated on a fixed hold-out split.\n"
+        "- MAE and RMSE are error metrics (lower is better); R² summarizes fit on the test split.\n"
+        "- Results depend on the dataset and split and should not be treated as guaranteed performance."
+    )
+
+with tab9:
     st.markdown('<div class="section-kicker">The people behind the project</div>',unsafe_allow_html=True)
     st.title("Meet the Team")
     st.write("A collaborative student project focused on data exploration, machine learning and responsible interpretation.")
@@ -291,15 +400,35 @@ with tab6:
         {"initials":"KU","name":"Kajal Upadhyay","role":"Research & Documentation Associate","desc":"Supports project research, written documentation and presentation of project details."},
         {"initials":"AS","name":"Aditi Singh","role":"Testing & Quality Support Associate","desc":"Supports review, testing and quality checks for a clear, reliable user experience."},
     ]
+    st.caption("To show real profile photos, add image files to the `team_photos` folder in your GitHub repository.")
+    photo_files = {
+        "Anuj Shukla": "anuj.jpg",
+        "Janhavi Yadav": "janhavi.jpg",
+        "Kajal Upadhyay": "kajal.jpg",
+        "Aditi Singh": "aditi.jpg",
+    }
+    photo_dir = Path(__file__).parent / "team_photos"
     team_cols = st.columns(4)
-    for col,member in zip(team_cols,team):
+    for col, member in zip(team_cols, team):
         with col:
-            st.markdown(f'<div class="team-card"><div class="team-avatar">{member["initials"]}</div><div class="team-name">{member["name"]}</div><div class="team-role">{member["role"]}</div><div class="team-desc">{member["desc"]}</div></div>',unsafe_allow_html=True)
-    st.markdown("<br>",unsafe_allow_html=True)
-    st.info("Team roles are suggested project-role descriptions. Edit them if the actual contributions differ.")
+            photo_path = photo_dir / photo_files[member["name"]]
+            if photo_path.exists():
+                st.image(str(photo_path), use_container_width=True)
+            st.markdown(
+                f'<div class="team-card"><div class="team-avatar">{member["initials"]}</div>'
+                f'<div class="team-name">{member["name"]}</div>'
+                f'<div class="team-role">{member["role"]}</div>'
+                f'<div class="team-desc">{member["desc"]}</div></div>',
+                unsafe_allow_html=True
+            )
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.info(
+        "Team roles are suggested project-role descriptions. Edit them if actual contributions differ. "
+        "Photo files are optional; if a file is missing, the member card still displays."
+    )
 
 st.markdown("""
 <div class="footer"><div style="font-weight:800;color:#4338ca;font-size:.92rem">🎓 Student Performance AI</div>
 Built with Streamlit · Pandas · Matplotlib · scikit-learn<br>
-Data source: UCI Student Performance dataset · Educational use only</div>
+Data source: UCI Student Performance dataset · Educational use only · Estimates are uncertain</div>
 """,unsafe_allow_html=True)
